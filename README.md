@@ -20,7 +20,29 @@ Your web app (Vue, React, etc.) keeps using the same HTTP API on `http://127.0.0
 
 End users install a single `.exe` (or installer) — no Node.js.
 
-## Build
+## Download (for end users)
+
+1. Open the [Releases](https://github.com/YOUR_ORG/print-service-windows/releases) page on GitHub.
+2. Download `PrintService-Windows-win-x64.zip` from the latest release.
+3. Unzip to any folder (for example `C:\PrintService`).
+4. Double-click `PrintService.exe` — the app appears in the system tray.
+
+The zip includes `settings.json` and optional `scripts\` batch files for auto-start on login.
+
+**Note:** HTML printing uses WebView2 (Microsoft Edge). Windows 11 includes it; on Windows 10, install the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) if prompted.
+
+## Create a new release (maintainers)
+
+Push a version tag — GitHub Actions builds and publishes the zip automatically:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+You can also run the **Release** workflow manually from the GitHub Actions tab.
+
+## Build locally
 
 ```powershell
 cd print-service-windows
