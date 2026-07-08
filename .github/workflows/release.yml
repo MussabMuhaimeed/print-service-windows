@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $version = "0.0.0-ci.${{ github.run_number }}"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building version $version"
+
+      - name: Publish self-contained app
+        shell: pwsh
+        run: |
+          dotnet publish PrintService.Windows.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -o ./artifacts/publish
+
+      - name: Package release files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ./artifacts/package | Out-Null
+          Copy-Item ./artifacts/publish/PrintService.exe ./artifacts/package/
+          Copy-Item ./artifacts/publish/settings.json ./artifacts/package/
+          New-Item -ItemType Directory -Force -Path ./artifacts/package/scripts | Out-Null
+          Copy-Item ./scripts/*.bat ./artifacts/package/scripts/
+          Compress-Archive -Path ./artifacts/package/* -DestinationPath ./artifacts/PrintService-Windows-win-x64.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrintService-Windows-win-x64
+          path: ./artifacts/PrintService-Windows-win-x64.zip
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./artifacts/PrintService-Windows-win-x64.zip
+          generate_release_notes: true
