@@ -1,0 +1,9 @@
+{
+  "defaultPrinter": "",
+  "defaultPaper": "100x150",
+  "port": 4510,
+  "allowedOrigins": [
+    "http://localhost",
+    "http://127.0.0.1"
+  ]
+}
