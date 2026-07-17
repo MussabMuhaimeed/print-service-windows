@@ -43,14 +43,28 @@ jobs:
         run: |
           $createRelease = 'false'
 
+          # Ensure local tag refs are present (workflow_run can race tag visibility).
+          git fetch --tags --force origin 2>$null | Out-Null
+
           if ($env:GITHUB_EVENT_NAME -eq 'workflow_run') {
             $sha = '${{ github.event.workflow_run.head_sha }}'
+            $triggerEvent = '${{ github.event.workflow_run.event }}'
+
             $tag = git describe --tags --exact-match $sha 2>$null
             if (-not $tag) {
               $tag = git tag -l 'v*' --points-at $sha | Select-Object -First 1
             }
+
             if (-not $tag) {
-              throw "No release tag found at commit $sha"
+              # No tag on this commit (e.g. manual Release) — use the latest existing v* tag.
+              $tag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
+              if (-not $tag) {
+                throw "No v* tags found in the repository (Release event=$triggerEvent, commit $sha)."
+              }
+              Write-Host "No tag at commit $sha (Release event=$triggerEvent). Using latest tag $tag"
+            }
+            else {
+              Write-Host "Attaching setup to existing release $tag ($sha)"
             }
 
             if (-not (Test-Path .\packaging\PrintService.iss)) {
@@ -58,7 +72,6 @@ jobs:
             }
 
             $createRelease = 'true'
-            Write-Host "Attaching setup to existing release $tag ($sha)"
           }
           elseif (-not [string]::IsNullOrWhiteSpace('${{ inputs.tag }}')) {
             $tag = '${{ inputs.tag }}'.Trim()
@@ -77,10 +90,17 @@ jobs:
             Write-Host "Building current branch code; version/release from tag $tag"
           }
           else {
-            $tag = "v0.0.$env:GITHUB_RUN_NUMBER"
+            $tag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
+            if (-not $tag) {
+              throw 'No v* tags found. Push a tag like v1.0.0 first, or pass the tag input.'
+            }
+
             if (-not (Test-Path .\packaging\PrintService.iss)) {
               throw 'packaging/PrintService.iss missing on this branch.'
             }
+
+            $createRelease = 'true'
+            Write-Host "No tag input provided; using latest tag $tag"
           }
 
           $appVersion = $tag.TrimStart('v', 'V')
