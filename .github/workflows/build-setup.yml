@@ -1,0 +1,177 @@
+name: Build setup EXE
+
+on:
+  workflow_run:
+    workflows: ['Release']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag for version + GitHub Release (e.g. v1.0.0).'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: printservice-setup-${{ github.event.workflow_run.head_sha || github.ref }}-${{ github.event.inputs.tag || 'none' }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-setup:
+    name: Build setup EXE
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $createRelease = 'false'
+
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_run') {
+            $sha = '${{ github.event.workflow_run.head_sha }}'
+            $tag = git describe --tags --exact-match $sha 2>$null
+            if (-not $tag) {
+              $tag = git tag -l 'v*' --points-at $sha | Select-Object -First 1
+            }
+            if (-not $tag) {
+              throw "No release tag found at commit $sha"
+            }
+
+            if (-not (Test-Path .\packaging\PrintService.iss)) {
+              throw 'packaging/PrintService.iss missing at tagged commit.'
+            }
+
+            $createRelease = 'true'
+            Write-Host "Attaching setup to existing release $tag ($sha)"
+          }
+          elseif (-not [string]::IsNullOrWhiteSpace('${{ inputs.tag }}')) {
+            $tag = '${{ inputs.tag }}'.Trim()
+            if ($tag -notmatch '^v') { $tag = "v$tag" }
+
+            $ref = git rev-parse --verify "refs/tags/$tag" 2>$null
+            if (-not $ref) {
+              throw "Tag '$tag' was not found (deleted or never pushed). List tags with: git ls-remote --tags origin refs/tags/v*"
+            }
+
+            if (-not (Test-Path .\packaging\PrintService.iss)) {
+              throw 'packaging/PrintService.iss missing. Run this workflow from a branch that includes the setup installer files.'
+            }
+
+            $createRelease = 'true'
+            Write-Host "Building current branch code; version/release from tag $tag"
+          }
+          else {
+            $tag = "v0.0.$env:GITHUB_RUN_NUMBER"
+            if (-not (Test-Path .\packaging\PrintService.iss)) {
+              throw 'packaging/PrintService.iss missing on this branch.'
+            }
+          }
+
+          $appVersion = $tag.TrimStart('v', 'V')
+          if ($appVersion -notmatch '^\d+(\.\d+){1,3}$') {
+            throw "Invalid version '$appVersion' (from tag '$tag')"
+          }
+
+          $setupName = "PrintService-Setup-$appVersion.exe"
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "app_version=$appVersion" >> $env:GITHUB_OUTPUT
+          "setup_name=$setupName" >> $env:GITHUB_OUTPUT
+          "create_release=$createRelease" >> $env:GITHUB_OUTPUT
+          Write-Host "Setup version: $appVersion (tag=$tag, file=$setupName, create_release=$createRelease)"
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .\publish\setup-app\scripts, .\dist | Out-Null
+          dotnet publish .\PrintService.Windows.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:Version=${{ steps.version.outputs.app_version }} `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -o .\publish\setup-app
+
+          if (-not (Test-Path .\publish\setup-app\PrintService.exe)) {
+            throw 'Publish did not produce PrintService.exe'
+          }
+
+          Copy-Item .\scripts\*.bat .\publish\setup-app\scripts\ -Force
+
+          if (-not (Test-Path .\publish\setup-app\settings.json)) {
+            throw 'Publish did not produce settings.json'
+          }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Compile setup EXE
+        shell: pwsh
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $iscc) {
+            throw 'ISCC.exe not found after installing Inno Setup'
+          }
+
+          & $iscc `
+            .\packaging\PrintService.iss `
+            "/DMyAppVersion=$($env:APP_VERSION)"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "ISCC failed with exit code $LASTEXITCODE"
+          }
+
+          Get-ChildItem .\dist\*.exe | ForEach-Object { Write-Host "Built $($_.FullName)" }
+        env:
+          APP_VERSION: ${{ steps.version.outputs.app_version }}
+
+      - name: Upload setup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrintService-Setup-${{ steps.version.outputs.app_version }}
+          path: dist/PrintService-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach setup to GitHub release
+        if: steps.version.outputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          append_body: true
+          generate_release_notes: false
+          body: |
+            ### Windows installer
+
+            Download **${{ steps.version.outputs.setup_name }}** below for a guided per-user Windows setup (Inno Setup).
+          files: dist/PrintService-Setup-*.exe
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

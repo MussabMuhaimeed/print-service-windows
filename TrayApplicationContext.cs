@@ -17,6 +17,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private StatusForm? _statusForm;
     private LogsForm? _logsForm;
     private SettingsForm? _settingsForm;
+    private AboutForm? _aboutForm;
 
     public TrayApplicationContext(
         PrintHttpServer server,
@@ -62,6 +63,9 @@ public sealed class TrayApplicationContext : ApplicationContext
         var stopItem = new ToolStripMenuItem("Stop Service");
         stopItem.Click += (_, _) => StopService();
 
+        var aboutItem = new ToolStripMenuItem("About");
+        aboutItem.Click += (_, _) => ShowAbout();
+
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += (_, _) => ExitApplication();
 
@@ -78,6 +82,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(startItem);
         menu.Items.Add(stopItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(aboutItem);
         menu.Items.Add(exitItem);
 
         return menu;
@@ -150,6 +155,18 @@ public sealed class TrayApplicationContext : ApplicationContext
         _settingsForm.Show();
         _settingsForm.BringToFront();
         _settingsForm.WindowState = FormWindowState.Normal;
+    }
+
+    private void ShowAbout()
+    {
+        if (_aboutForm is null || _aboutForm.IsDisposed)
+        {
+            _aboutForm = new AboutForm();
+        }
+
+        _aboutForm.Show();
+        _aboutForm.BringToFront();
+        _aboutForm.WindowState = FormWindowState.Normal;
     }
 
     private void ExitApplication()
