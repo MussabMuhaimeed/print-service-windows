@@ -7,7 +7,7 @@ namespace PrintService.Windows;
 
 internal static class Program
 {
-    private const string MutexName = "DLIS_PrintService_SingleInstance";
+    private const string MutexName = "PrintService_SingleInstance";
 
     [STAThread]
     private static void Main()
