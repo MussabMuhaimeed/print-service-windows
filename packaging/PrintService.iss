@@ -25,6 +25,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\Assets\app.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
@@ -41,6 +42,7 @@ Name: "startup"; Description: "Start automatically when I &log in"; GroupDescrip
 Source: "..\publish\setup-app\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\publish\setup-app\settings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 Source: "..\publish\setup-app\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\publish\setup-app\Assets\*"; DestDir: "{app}\Assets"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -58,3 +60,4 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: no
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\scripts"
+Type: filesandordirs; Name: "{app}\Assets"

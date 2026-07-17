@@ -55,6 +55,9 @@ jobs:
           Copy-Item ./artifacts/publish/settings.json ./artifacts/package/
           New-Item -ItemType Directory -Force -Path ./artifacts/package/scripts | Out-Null
           Copy-Item ./scripts/*.bat ./artifacts/package/scripts/
+          if (Test-Path ./artifacts/publish/Assets) {
+            Copy-Item ./artifacts/publish/Assets ./artifacts/package/Assets -Recurse -Force
+          }
           Compress-Archive -Path ./artifacts/package/* -DestinationPath ./artifacts/PrintService-Windows-win-x64.zip
 
       - name: Upload build artifact

@@ -17,7 +17,6 @@ public sealed class TrayApplicationContext : ApplicationContext
     private StatusForm? _statusForm;
     private LogsForm? _logsForm;
     private SettingsForm? _settingsForm;
-    private AboutForm? _aboutForm;
 
     public TrayApplicationContext(
         PrintHttpServer server,
@@ -34,7 +33,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             Text = "Print Service Windows",
             Visible = true,
-            Icon = SystemIcons.Application,
+            Icon = LoadAppIcon(),
         };
 
         _trayIcon.ContextMenuStrip = BuildMenu();
@@ -159,14 +158,19 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private void ShowAbout()
     {
-        if (_aboutForm is null || _aboutForm.IsDisposed)
+        using var aboutForm = new AboutForm();
+        aboutForm.ShowDialog();
+    }
+
+    private static Icon LoadAppIcon()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+        if (File.Exists(path))
         {
-            _aboutForm = new AboutForm();
+            return new Icon(path);
         }
 
-        _aboutForm.Show();
-        _aboutForm.BringToFront();
-        _aboutForm.WindowState = FormWindowState.Normal;
+        return Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
     }
 
     private void ExitApplication()
