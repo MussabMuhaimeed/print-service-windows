@@ -17,11 +17,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          git fetch --tags --force origin 2>$null | Out-Null
+
+          $tag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
+          if (-not $tag) {
+            throw 'No v* tags found. Push a tag like v1.0.0 first.'
+          }
+
+          $version = $tag.TrimStart('v', 'V')
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building with latest tag $tag (version $version)"
+
       - name: Build
-        run: dotnet build PrintService.Windows.csproj -c Release
+        run: dotnet build PrintService.Windows.csproj -c Release -p:Version=${{ steps.version.outputs.version }}
