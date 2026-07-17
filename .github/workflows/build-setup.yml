@@ -103,7 +103,7 @@ jobs:
       - name: Publish application
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path .\publish\setup-app\scripts, .\dist | Out-Null
+          New-Item -ItemType Directory -Force -Path .\publish\setup-app\scripts, .\publish\setup-app\Assets, .\dist | Out-Null
           dotnet publish .\PrintService.Windows.csproj `
             -c Release `
             -r win-x64 `
@@ -119,9 +119,14 @@ jobs:
           }
 
           Copy-Item .\scripts\*.bat .\publish\setup-app\scripts\ -Force
+          Copy-Item .\Assets\* .\publish\setup-app\Assets\ -Force
 
           if (-not (Test-Path .\publish\setup-app\settings.json)) {
             throw 'Publish did not produce settings.json'
+          }
+
+          if (-not (Test-Path .\publish\setup-app\Assets\app.ico)) {
+            throw 'Assets/app.ico missing after publish'
           }
 
       - name: Install Inno Setup
